@@ -1,0 +1,41 @@
+{% extends 'pre_login.html' %}
+
+{% block title %}
+<title>Login</title>
+{% endblock %} 
+
+{% block content %}
+<form method="POST" action="">
+    {{ form.hidden_tag() }}
+    <fieldset class="form-group">
+        <div class="form-group">
+            {{ form.username.label() }}
+            {% if form.username.errors %}
+                {{ form.username() }}
+                <div class="invalid-feedback">
+                    {% for error in form.username.errors%}
+                        <span>{{error}}</span>
+                    {% endfor %}
+                </div>
+            {% else %}
+                {{ form.username() }}
+            {% endif %}
+        </div>
+        <div class="form-group">
+            {{ form.password.label() }}
+            {% if form.password.errors %}
+                {{ form.password() }}
+                <div class="invalid-feedback">
+                    {% for error in form.password.errors %}
+                        <span>{{ error }}</span>
+                    {% endfor %}
+                </div>
+            {% else %}
+                {{ form.password() }}
+            {% endif %}
+        </div>
+        <div class="form-group">
+            {{ form.submit() }}
+        </div>
+</form>
+{% endblock %}
