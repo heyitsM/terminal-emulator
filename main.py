@@ -25,6 +25,7 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     folders = db.relationship("Folder", backref="user", lazy=True)  # folders in user directory
+    files = db.relationship("File", backref="user", lazy=True)  # all files the user has
     # TODO: make a home folder initially when user is initialized
     commands = db.relationship("Command", backref="user", lazy=True)
 
@@ -43,6 +44,8 @@ class File(db.Model):
     file_name = db.Column(db.String(255), unique=True, nullable=False)
     file_content = db.Column(db.Text())
     folder_id = db.Column(db.String(255), db.ForeignKey('folder.id'),
+        nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
         nullable=False)
     created = db.Column(db.DateTime())
 
@@ -107,7 +110,7 @@ def register():
             return render_template("register.html", form=form)
     return render_template("register.html", form=form)
 
-@app.route("/terminal", methods=['GET','POST'])
+@app.route("/terminal", methods=['GET','POST','PUT'])
 @login_required
 def terminal():
     user = User.query.filter_by(username=session['username']).first()
@@ -115,43 +118,73 @@ def terminal():
     
     if form.validate_on_submit() and user:
         status = {'response':form.text.data, 'user':user}
-        handle_response(status)
+        response = handle_response(status)
+        if response == "logout":
+            return redirect(url_for('logout'))
+        return render_template("terminal.html", form=form, response=response)
 
-    return render_template("terminal.html", form=form)
+    return render_template("terminal.html", form=form, response="")
 
 def handle_response(info):
     data = info['response']
+    response = ""
     if data[0:3] == "cd ":
-        change_directory(data[3:], info['user'])
+        response = change_directory(data[3:], info['user'])
     elif data[0:5] == "echo ":
-        echo(data[5:], info['user'])
+        response = echo(data[5:], info['user'])
     elif data[0:6] == "touch ":
-        touch(data[6:], info['user'])
+        response = touch(data[6:], info['user'])
     elif data[0:6] == "mkdir ":
-        mkdir(data[6:], info['user'])
+        response = mkdir(data[6:], info['user'])
     elif data[0:2] == "ls":
-        ls(data[3:], info['user'])
+        response = ls(data[2:], info['user'])
+    elif data[0:3] == "pwd":
+        response = pwd(info['user'])
+    elif data[0:6] == "logout":
+        response = "logout"
+    return response
 
 def change_directory(content, user):
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
+    new_folder = Folder.query.filter_by(user_id=user.id, name=content.strip()).first()
 
-    if current_folder:
+    if current_folder and new_folder:
         current_folder.current = False
-        content = content.strip()
-        new_folder = Folder.query.filter_by(user_id=user.id, name=content).first()
         new_folder.current = True
-        print(new_folder)
+        db.session.commit()
+        return ""
+    elif new_folder:
+        new_folder.current = True
+        db.session.commit()
+        return ""
+    return "Could not change directory because there is no current directory"
 
 def echo(content, user):
-    print(content)
+    return content
 
 def touch(content, user):
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
 
     if current_folder:
-        new_file = File(file_name=content.strip(), created=datetime.now(), folder_id=current_folder.id)
-        db.session.add(new_file)
-        db.session.commit()
+        is_existing = File.query.filter_by(user_id=user.id, folder_id=current_folder.id, file_name=content.strip()).first()
+
+        if not is_existing:
+            new_file = File(user_id=user.id, file_name=content.strip(), created=datetime.now(), folder_id=current_folder.id)
+            db.session.add(new_file)
+            db.session.commit()
+            return new_file.file_name
+
+        return f'Error: file already exists in this directory with the name {content.strip()}'
+
+    return f'Error: no current working directory'
+
+def pwd(user):
+    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
+    if current_folder:
+        print(current_folder.name)
+        return current_folder.name
+
+    return f'Error: no current working directory'
 
 def mkdir(content, user):
     content = content.strip()
@@ -161,15 +194,21 @@ def mkdir(content, user):
         new_folder = Folder(name=content, current=False, user_id=user.id, root=False)
         db.session.add(new_folder)
         db.session.commit()
+        return ""
+    
+    return f'Could not create {content} folder because {content} already exists'
 
 
 def ls(content, user):
     # will need to keep track of current directory for this
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    files = current_folder.files
-
-    for fil in files:
-        print(fil.name)
+    if current_folder:
+        files = current_folder.files
+        list_files = ""
+        for fil in files:
+            list_files += fil.file_name
+        return list_files
+    return f'Could not list files in current directory because there is no current directory'
 
 
 @app.route("/logout")
