@@ -25,8 +25,7 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     folders = db.relationship("Folder", backref="user", lazy=True)  # folders in user directory
-    files = db.relationship("File", backref="user", lazy=True)  # all files the user has
-    # TODO: make a home folder initially when user is initialized
+    files = db.relationship("File", backref="user", lazy=True)  # all files the user has, will remove sometime
     commands = db.relationship("Command", backref="user", lazy=True)
 
 class Folder(db.Model):
@@ -36,7 +35,12 @@ class Folder(db.Model):
     root = db.Column(db.Boolean, nullable=False)  # True if it is the root directory (once we figure out the parent/child rel)
     current = db.Column(db.Boolean, nullable=False)  # True if the user is currently in this directory
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
-        nullable=False)
+        nullable=False)  # links it back to user
+    
+    parent_id = db.Column(db.Integer, db.ForeignKey('folder.id'))
+
+    children = db.relationship('Folder',
+        backref=db.backref('parent', remote_side='Folder.id'))
 
 
 class File(db.Model):
@@ -82,9 +86,8 @@ def home():
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        existing_users_with_username = User.query.filter_by(username=form.username.data).all()
-        if len(existing_users_with_username) != 0:
-            user = existing_users_with_username[0]
+        user = User.query.filter_by(username=form.username.data).first()
+        if user:
             session["username"] = user.username
             session["email"] = user.email
             return redirect(url_for("terminal"))
@@ -98,11 +101,14 @@ def login():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        existing_users_with_username = User.query.filter_by(username=form.username.data).all()
-        if len(existing_users_with_username) == 0:
+        existing_users_with_username = User.query.filter_by(username=form.username.data).first()
+        if not existing_users_with_username:
             pw_hash = bcrypt.generate_password_hash(form.password.data)
             user = User(username=form.username.data, email=form.email.data, password=form.password.data)
             db.session.add(user)
+            db.session.commit()
+            home = Folder(root=True, current=True, name="~", user_id=user.id)
+            db.session.add(home)
             db.session.commit()
             return redirect(url_for("login"))
         else:
@@ -142,21 +148,43 @@ def handle_response(info):
         response = pwd(info['user'])
     elif data[0:6] == "logout":
         response = "logout"
+    elif data == "path":
+        response = path(info['user'])
     return response
+
+def path(user):
+    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
+    back = current_folder
+    path = ""
+    current_name = current_folder.name
+
+    while current_name != "~":
+        temp_path = path
+        path = "/" + back.name + temp_path
+        back = Folder.query.filter_by(user_id=user.id, id=back.parent_id).first()  # gets parent of current folder
+        current_name = back.name
+
+    return "~" + path + "/"
+
 
 def change_directory(content, user):
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    new_folder = Folder.query.filter_by(user_id=user.id, name=content.strip()).first()
+    new_folder = None
 
-    if current_folder and new_folder:
+    if content.strip() != "..":
+        new_folder = Folder.query.filter_by(user_id=user.id, name=content.strip(), parent_id=current_folder.id).first()
+    else:
+        parent_of_current = Folder.query.filter_by(user_id=user.id, id=current_folder.parent_id).first()  # gets parent of current for later
+
+        if parent_of_current:
+            new_folder = parent_of_current
+    
+    if current_folder and new_folder != None:
         current_folder.current = False
         new_folder.current = True
         db.session.commit()
         return ""
-    elif new_folder:
-        new_folder.current = True
-        db.session.commit()
-        return ""
+
     return "Could not change directory because there is no current directory"
 
 def echo(content, user):
@@ -164,10 +192,8 @@ def echo(content, user):
 
 def touch(content, user):
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-
     if current_folder:
         is_existing = File.query.filter_by(user_id=user.id, folder_id=current_folder.id, file_name=content.strip()).first()
-
         if not is_existing:
             new_file = File(user_id=user.id, file_name=content.strip(), created=datetime.now(), folder_id=current_folder.id)
             db.session.add(new_file)
@@ -187,11 +213,13 @@ def pwd(user):
     return f'Error: no current working directory'
 
 def mkdir(content, user):
+    current_directory = Folder.query.filter_by(user_id=user.id, current=True).first()
+
     content = content.strip()
-    is_existing = Folder.query.filter_by(user_id=user.id, name=content).first()
+    is_existing = Folder.query.filter_by(parent_id=current_directory.id, user_id=user.id, name=content).first()
 
     if not is_existing:
-        new_folder = Folder(name=content, current=False, user_id=user.id, root=False)
+        new_folder = Folder(parent_id=current_directory.id, name=content, current=False, user_id=user.id, root=False)
         db.session.add(new_folder)
         db.session.commit()
         return ""
@@ -202,12 +230,18 @@ def mkdir(content, user):
 def ls(content, user):
     # will need to keep track of current directory for this
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
+    # home = Folder(root=True, current=True, name="~", user_id=user.id)
     if current_folder:
         files = current_folder.files
+        directories = current_folder.children
+
         list_files = ""
         for fil in files:
-            list_files += fil.file_name
+            list_files += fil.file_name +" "
+        for dire in directories:
+            list_files += f'<b>{dire.name}</b>' + " "
         return list_files
+
     return f'Could not list files in current directory because there is no current directory'
 
 
