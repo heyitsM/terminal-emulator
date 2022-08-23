@@ -1,5 +1,41 @@
 {% extends 'pre_login.html' %}
-
 {% block title %}
 <title>Home</title>
+<link href="../static/styles.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+{% endblock %}
+
+
+{% block content %}
+<div class="content">
+    <div id="cover" class="entry">
+    </div>
+    <div class="navbar">
+        <table>
+            <tr>
+                <td><a href="#cover"><h2>Cover</h2></a></td>
+                <td><a href="#second"><h2>Second<h2></a></td>
+                <td><a href="#third"><h2>Third</h2></a></td>
+                <td><a href="#fourth"><h2>Fourth</h2></a></td>
+                <td><a href="/login"><h2>Login</h2></a></td>
+                <td><a href="/register"><h2>Register</h2></a></td>
+                <td width="60%" style="text-align:right; padding-right:5vh"><h1>Terminal Emulator</h1></td>
+            </tr>
+        </table>
+    </div>
+    <div id="second" class="second-slide">
+        <h1>Welcome!</h1>
+    </div>
+    <div id="third" class="third-slide">
+        <h1>This is pretty cool, right?</h1>
+    </div>
+    <div id="fourth" class="fourth-slide">
+        <h1>Click here to learn more!</h1>
+    </div>
+</div>
+<div class="footer">
+    <h1>Footer</h1>
+</div>
 {% endblock %}

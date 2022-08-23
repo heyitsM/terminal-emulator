@@ -1,0 +1,97 @@
+h1 {
+    color:rgb(255, 217, 0);
+    margin:0px;
+    padding:0px;
+    border:0px;
+}
+
+html, body {
+    margin: 0px;
+    font-family: 'Roboto', sans-serif;
+    scroll-behavior: smooth;
+    
+}
+
+.content {
+    background: rgb(2,0,36);
+    background: linear-gradient(0deg, rgba(2,0,36,1) 0%, rgba(9,9,121,1) 25%, rgba(5,96,179,1) 50%, rgba(3,152,215,1) 75%, rgba(205,247,255,1) 100%);
+}
+
+table {
+    table-layout: fixed;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+td {
+    font-weight: bold;
+}
+
+.navbar {
+    background-color:transparent;
+    /*color:transparent;*/
+    margin:-10vh 0vh 0vh 0vh; /* if you change padding or height, this must change as well */
+    border: 0px solid;
+    height:10vh; /* if you change margin or padding, this must change as well */
+    padding-left:5vh;
+    display:flex;
+    position:sticky;
+    position: -webkit-sticky;
+    top: 0px;
+}
+
+a, a:hover, a:active {
+    color:white;
+    text-decoration: none;
+}
+
+.entry {
+    margin: 0px 0px 0px;
+    border: 0px solid;
+    padding:5vh;
+    height:90vh;
+    display:flex;
+    justify-content:right; /* horizontally centering */
+    align-items:flex-end; /* vertically centering */
+}
+
+.second-slide {
+    margin: 0px 0px 0px;
+    border: 0px solid;
+    padding:5vh;
+    height:90vh;
+    display:flex;
+    justify-content:left; /* horizontally centering */
+    align-items:center; /* vertically centering */
+}
+
+.third-slide {
+    margin: 0px 0px 0px;
+    border: 0px solid;
+    padding:5vh;
+    height:90vh;
+    display:flex;
+    justify-content:right; /* horizontally centering */
+    align-items:center; /* vertically centering */
+}
+
+.fourth-slide {
+    margin: 0px 0px 0px;
+    border: 0px solid;
+    padding:5vh;
+    height:90vh;
+    display:flex;
+    justify-content:left; /* horizontally centering */
+    align-items:center; /* vertically centering */
+}
+
+.footer {
+    background-color:rgba(2,0,36,1);
+    margin: 0px 0px 0px;
+    border: 1px solid white;
+    padding:5vh;
+    height:10vh;
+    display:flex;
+    justify-content:center; /* horizontally centering */
+    align-items:center; /* vertically centering */
+}
