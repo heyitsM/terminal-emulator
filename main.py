@@ -6,6 +6,7 @@ from flask_bcrypt import Bcrypt
 import functools
 import random
 import requests
+from tempdb import gen_help_string
 import os
 import bcrypt
 from datetime import datetime
@@ -137,16 +138,19 @@ def terminal():
     if form.validate_on_submit() and user:
         status = {'response':form.text.data, 'user':user}
         response = handle_response(status)
+        
         if response == "logout":
             return redirect(url_for('logout'))
-
+ 
         if response != "cleared":
             new_command = Command(command_text=form.text.data, user_id=user.id)
-            resp = Prev_Response(response_text=response, user_id=user.id)
             db.session.add(new_command)
             db.session.commit()
+            resp = Prev_Response(response_text=response, user_id=user.id)
             db.session.add(resp)
             db.session.commit()
+           
+            
         form.text.data=""
         commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
         responses = Prev_Response.query.order_by(Prev_Response.id.desc()).filter_by(user_id=user.id)
@@ -179,6 +183,8 @@ def handle_response(info):
         response = path(info['user'])
     elif data == "clear":
         response = clear(info['user'])
+    elif data == "help":
+        response = gen_help_string()
     return response
 
 def clear(user):

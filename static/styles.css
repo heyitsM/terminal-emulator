@@ -5,6 +5,11 @@ h1 {
     border:0px;
 }
 
+pre {
+    font-size: 18px;
+    font-family: 'Roboto', sans-serif;
+}
+
 html, body {
     margin: 0px;
     font-family: 'Roboto', sans-serif;
@@ -12,7 +17,7 @@ html, body {
     color: white /*rgba(10,9,27,1)*/;
 }
 
-p, input {
+p, div, input {
     font-size:18px;
 }
 

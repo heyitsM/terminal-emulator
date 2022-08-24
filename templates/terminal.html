@@ -16,7 +16,8 @@
 <div class="terminal">
     <div>
         {% for response in responses|reverse %}
-            <div style="padding-left:5vh;"> {{ response.response_text }}</div>
+            <div style="padding-left:11vh;"> {{ commands[loop.revindex0].command_text }}</div>
+            <div style="padding-left:11vh;"><pre>{{ response.response_text }}</pre></div>
         {% endfor %}
     </div>
 </div>
