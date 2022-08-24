@@ -27,6 +27,7 @@ class User(db.Model):
     folders = db.relationship("Folder", backref="user", lazy=True)  # folders in user directory
     files = db.relationship("File", backref="user", lazy=True)  # all files the user has, will remove sometime
     commands = db.relationship("Command", backref="user", lazy=True)
+    responses = db.relationship("Prev_Response", backref="user", lazy=True)
 
 class Folder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -57,7 +58,13 @@ class Command(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
         nullable=False)
-    text = db.Column(db.String(255), nullable=False)
+    command_text = db.Column(db.String(255), nullable=False)
+
+class Prev_Response(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
+        nullable=False)
+    response_text = db.Column(db.String(255), nullable=False)
 
 def login_required(func):
     @functools.wraps(func)
@@ -92,8 +99,7 @@ def login():
             session["email"] = user.email
             return redirect(url_for("terminal"))
         else:
-            flash(f'Account does not exist for {form.username.data}. If you would like to register with this username, please click below!', 'failure')
-            return render_template("login.html", form=form)
+            return render_template("login.html", form=form, msg=f'Account does not exist for this username. If you would like to register, please click below!')
     return render_template("login.html", form=form)
 
 @app.route("/register", methods=['GET','POST'])
@@ -102,7 +108,8 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         existing_users_with_username = User.query.filter_by(username=form.username.data).first()
-        if not existing_users_with_username:
+        existing_users_with_email = User.query.filter_by(email=form.email.data).first()
+        if not existing_users_with_username and not existing_users_with_email:
             pw_hash = bcrypt.generate_password_hash(form.password.data)
             user = User(username=form.username.data, email=form.email.data, password=form.password.data)
             db.session.add(user)
@@ -112,8 +119,13 @@ def register():
             db.session.commit()
             return redirect(url_for("login"))
         else:
-            flash(f'Account already exists for {form.username.data}. If you would like to login with this username, please click below!', 'failure')
-            return render_template("register.html", form=form)
+            if existing_users_with_email and existing_users_with_username:
+                return render_template("register.html", form=form, bad_un_em=f"A user already exists with username and email you chose. If that is you, please login or recover username/password below!")
+            elif existing_users_with_username:
+                return render_template("register.html", form=form, bad_un=f"A user already exists with that username")
+            elif existing_users_with_email:
+                return render_template("register.html", form=form, bad_em=f"A user already exists with the email")
+            
     return render_template("register.html", form=form)
 
 @app.route("/terminal", methods=['GET','POST','PUT'])
@@ -127,7 +139,22 @@ def terminal():
         response = handle_response(status)
         if response == "logout":
             return redirect(url_for('logout'))
-        return render_template("terminal.html", form=form, response=response)
+
+        if response != "cleared":
+            new_command = Command(command_text=form.text.data, user_id=user.id)
+            resp = Prev_Response(response_text=response, user_id=user.id)
+            db.session.add(new_command)
+            db.session.commit()
+            db.session.add(resp)
+            db.session.commit()
+        form.text.data=""
+        commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
+        responses = Prev_Response.query.order_by(Prev_Response.id.desc()).filter_by(user_id=user.id)
+        return render_template("terminal.html", form=form, responses=responses, commands=commands)
+    if user:
+        commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
+        responses = Prev_Response.query.order_by(Prev_Response.id.desc()).filter_by(user_id=user.id)
+        return render_template("terminal.html", form=form, responses=responses, commands=commands)
 
     return render_template("terminal.html", form=form, response="")
 
@@ -150,7 +177,14 @@ def handle_response(info):
         response = "logout"
     elif data == "path":
         response = path(info['user'])
+    elif data == "clear":
+        response = clear(info['user'])
     return response
+
+def clear(user):
+    Prev_Response.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    return "cleared"
 
 def path(user):
     current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
@@ -250,7 +284,6 @@ def ls(content, user):
 def logout():
     user = session["username"]
     session.clear()
-    flash(f'{user} is logged out!', 'success')
     return redirect(url_for("home"))
 
 if __name__ == '__main__':

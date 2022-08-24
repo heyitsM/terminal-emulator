@@ -2,12 +2,17 @@
 
 {% block title %}
 <title>Login</title>
+<link href="../static/styles.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
 {% endblock %} 
 
 {% block content %}
-<form method="POST" action="">
-    {{ form.hidden_tag() }}
-    <fieldset class="form-group">
+<div class="login-register form-wrapper" style="height:100vh">
+    <form method="POST" action="">
+        {{ form.hidden_tag() }}
+        <h1 style="padding-top:1vh; padding-bottom:1vh; margin-bottom:1vh; text-align:center;">Login</h1>
         <div class="form-group">
             {{ form.username.label() }}
             {% if form.username.errors %}
@@ -34,8 +39,26 @@
                 {{ form.password() }}
             {% endif %}
         </div>
-        <div class="form-group">
+        <div class="form-group" style="color:rgb(255, 217, 0)">
             {{ form.submit() }}
         </div>
-</form>
+        {% if msg %}
+        <div class="form-group">
+            {{ msg }}
+        </div>
+        {% endif %}
+        <div class="form-group">
+            Don't have an account yet? Click <a href="/register">here</a> to register!
+        </div>
+        <div class="form-group">
+            Forgot your username? Click <a href="/forgot_username">here</a>!
+        </div>
+        <div class="form-group">
+            Forgot your password? Click <a href="/forgot_password">here</a>!
+        </div>
+    </form>
+</div>
+<div class="navbar" style="justify-content:right; align-items:center">
+    <a href="/"><h1 style="padding-right:5vh">Terminal Emulator</h1></a> 
+</div>
 {% endblock %}

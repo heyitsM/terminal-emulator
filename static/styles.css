@@ -9,12 +9,48 @@ html, body {
     margin: 0px;
     font-family: 'Roboto', sans-serif;
     scroll-behavior: smooth;
-    
+    color: white /*rgba(10,9,27,1)*/;
+}
+
+p, input {
+    font-size:18px;
 }
 
 .content {
     background: rgb(2,0,36);
-    background: linear-gradient(0deg, rgba(2,0,36,1) 0%, rgba(9,9,121,1) 25%, rgba(5,96,179,1) 50%, rgba(3,152,215,1) 75%, rgba(205,247,255,1) 100%);
+    background: linear-gradient(180deg, rgba(10,9,27,1) 0%, rgba(9,9,121,1) 100%);
+}
+
+.terminal {
+    background: rgb(2,0,36);
+    background: linear-gradient(0deg, rgba(10,9,27,1) 0%, rgba(9,9,121,1) 100%);
+    margin-top:-10vh;
+    width:100%;
+    height:100%;
+    min-height:80vh;
+    display:flex;
+    justify-content:left; /* horizontally centering */
+    align-items:flex-end; 
+}
+
+.terminal-input {
+    background: rgba(10,9,27,1);
+    border: 0px solid;
+    height:20vh; /* if you change margin or padding, this must change as well */
+    margin-bottom:0px;
+    padding-bottom:0px;
+    position:fixed;
+    bottom:0;
+    width:100%;
+}
+
+.spacer {
+    height:20vh;
+}
+
+.login-register {
+    background: rgba(10,9,27,255);
+    background: radial-gradient(circle, rgba(10,9,27,1), rgba(10,9,27,0)), url(../static/images/starry_night.jpg);
 }
 
 table {
@@ -40,19 +76,31 @@ td {
     top: 0px;
 }
 
+.terminal-navbar {
+    background: rgba(10,9,27,1);
+    background:linear-gradient(180deg, rgba(10,9,27,1) 0%, rgba(10,9,27,0) 100%);
+    height:10vh;
+    padding-left:5vh;
+    display:flex;
+    position:sticky;
+    position: -webkit-sticky;
+    top: 0px;
+}
+
 a, a:hover, a:active {
     color:white;
     text-decoration: none;
 }
 
 .entry {
+    background-image: linear-gradient(to top, rgba(10,9,27,1), rgba(10,9,27,0)), url(../static/images/starry_night.jpg); /* rgba(2,0,36,1);*/
     margin: 0px 0px 0px;
     border: 0px solid;
     padding:5vh;
     height:90vh;
     display:flex;
     justify-content:right; /* horizontally centering */
-    align-items:flex-end; /* vertically centering */
+    align-items:center; /* vertically centering */
 }
 
 .second-slide {
@@ -61,8 +109,51 @@ a, a:hover, a:active {
     padding:5vh;
     height:90vh;
     display:flex;
-    justify-content:left; /* horizontally centering */
+    justify-content:left;  /* horizontally centering */
     align-items:center; /* vertically centering */
+}
+
+/* SMALL BOX */
+.even-flex-item:nth-child(odd) {
+    margin-right:1vh;
+    width: 29%;
+    background-color: transparent;
+    height:80vh;
+    display:flex;
+    align-items:center;
+    justify-content:left;
+}
+.odd-flex-item:nth-child(even) {
+    margin-left:1vh;
+    width: 29%;
+    background-color: transparent;
+    height:80vh;
+    display:flex;
+    align-items:center;
+    justify-content:right;
+}
+
+/* LARGE BOX */
+.even-flex-item:nth-child(even) {
+    margin-left:1vh;
+    width: 70%;
+    background-color: transparent; /* will get rid of later, just for sizing rn */
+    text-align:right;
+    height:80vh;
+    display:flex;
+    align-items:center;
+    justify-content:right;
+}
+
+.odd-flex-item:nth-child(odd) {
+    margin-right:1vh;
+    width: 70%;
+    background-color: transparent; /* will get rid of later, just for sizing rn */
+    text-align:right;
+    height:80vh;
+    display:flex;
+    align-items:center;
+    justify-content:left;
 }
 
 .third-slide {
@@ -86,12 +177,55 @@ a, a:hover, a:active {
 }
 
 .footer {
-    background-color:rgba(2,0,36,1);
     margin: 0px 0px 0px;
-    border: 1px solid white;
     padding:5vh;
     height:10vh;
     display:flex;
     justify-content:center; /* horizontally centering */
     align-items:center; /* vertically centering */
 }
+
+.form-wrapper {
+    display:flex;
+justify-content:center;
+    align-items:center;
+}
+
+form {
+    padding: 5vh 5vw 5vh 5vw;
+    border-radius: 4vh;
+}
+
+input[type="text"], 
+input[type="password"], 
+input[type="submit"], 
+input[type="email"], 
+input[type="text"]:focus, 
+input[type="password"]:focus, 
+input[type="submit"]:focus, 
+input[type="email"]:focus, 
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus {
+    background-color:transparent;
+    border: 0px;
+    border-bottom: .25vh solid rgb(255, 217, 0);
+    outline: 0px;
+    color: rgb(255, 217, 0);
+    -webkit-text-fill-color:rgb(255,217,0);
+    -webkit-box-shadow: 0 0 0px 1000px rgba(10,9,27,1) inset;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+input[type="submit"] {
+    color: rgb(255, 217, 0);
+}
+
+.form-group {
+    padding: 1vh;
+}
+
+.terminal-txt {
+    width:100%;
+}
+

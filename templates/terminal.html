@@ -1,29 +1,57 @@
 {% extends 'post_login.html' %}
 {% block title %}
 <title>Terminal</title>
+<link href="../static/styles.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+<style>
+    html, body {scroll-behavior:auto;}
+</style>
 {% endblock %}
 {% block content %}
-<form method="POST" action="">
-    {{ form.hidden_tag() }}
-    <fieldset class="form-group">
-        <div class="form-group">
-            {{ form.text.label() }}
-            {% if form.text.errors %}
-                {{ form.text() }}
-                <div class="invalid-feedback">
-                    {% for error in form.text.errors%}
-                        <span>{{error}}</span>
-                    {% endfor %}
-                </div>
-            {% else %}
-                {{ form.text() }}
-            {% endif %}
-        </div>
-        <div class="form-group">
-            {{ form.submit() }}
-        </div>
-</form>
-<div>
-    {{ response }}
+<div class="terminal-navbar" style="justify-content:right;">
+    <a href="/"><h1 style="padding-right:5vh; padding-top:2vh; ">Terminal Emulator</h1></a>
 </div>
+<div class="terminal">
+    <div>
+        {% for response in responses|reverse %}
+            <div style="padding-left:5vh;"> {{ response.response_text }}</div>
+        {% endfor %}
+    </div>
+</div>
+<div class="spacer"></div>
+<div class="terminal-input">
+    <form method="POST" action="" style="padding-bottom:0px" autocomplete="off">
+        {{ form.hidden_tag() }}
+        <input autocomplete="false" name="hidden" type="text" style="display:none;">
+        <div class="form-group">
+            {{ form.submit(style="visibility:hidden") }}
+        </div>
+        <div class="form-group">
+            {{ form.text(style="width:87vw;", autofocus=on) }}
+        </div>
+        
+    </form>
+</div>
+<script>
+    function toBottom() {
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+    window.onload=toBottom;
+
+    document.onkeydown = waitKey;
+
+function waitKey(e) {
+    e = e || window.event;
+
+    if (e.keyCode == '38') {
+        // up arrow
+    }
+    else if (e.keyCode == '40') {
+        // down arrow
+    }
+
+}
+</script>
 {% endblock %}

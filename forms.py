@@ -18,5 +18,5 @@ class RegisterForm(FlaskForm):
     submit = SubmitField('Sign Up')
 
 class TerminalForm(FlaskForm):
-    text = TextAreaField()
+    text = StringField()
     submit = SubmitField('')
