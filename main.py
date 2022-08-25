@@ -1,4 +1,4 @@
-from flask import Flask, render_template, url_for, flash, redirect, request, session
+from flask import Flask, render_template, url_for, flash, redirect, request, session, make_response
 from flask_behind_proxy import FlaskBehindProxy
 from flask_sqlalchemy import SQLAlchemy
 from forms import LoginForm, RegisterForm, TerminalForm
@@ -9,7 +9,17 @@ import requests
 from tempdb import gen_help_string
 import os
 import bcrypt
-from datetime import datetime
+from datetime import datetime, timedelta
+import requests
+import base64
+import json
+from urllib.parse import quote
+
+CLIENT_ID = os.environ.get('CLIENT_ID')
+CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
+AUTH_URL = 'https://accounts.spotify.com/authorize'
+TOKEN_URL = 'https://accounts.spotify.com/api/token'
+BASE_URL = 'https://api.spotify.com/v1/'
 
 app = Flask(__name__)
 proxied = FlaskBehindProxy(app)
@@ -29,6 +39,7 @@ class User(db.Model):
     files = db.relationship("File", backref="user", lazy=True)  # all files the user has, will remove sometime
     commands = db.relationship("Command", backref="user", lazy=True)
     responses = db.relationship("Prev_Response", backref="user", lazy=True)
+    tokens = db.relationship("Token", backref="user", lazy=True)
 
 class Folder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -66,6 +77,15 @@ class Prev_Response(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
         nullable=False)
     response_text = db.Column(db.String(255), nullable=False)
+
+class Token(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
+        nullable=False)
+    access_token = db.Column(db.String(255), nullable=False)
+    refresh_token = db.Column(db.String(255), nullable=False)
+    token_type = db.Column(db.String(255), nullable=False)
+    expires_in = db.Column(db.DateTime(), nullable=False)
 
 def login_required(func):
     @functools.wraps(func)
@@ -129,16 +149,71 @@ def register():
             
     return render_template("register.html", form=form)
 
+@app.route("/spotify_callback/")
+@login_required
+def spotify_2():
+    auth_token = request.args['code']
+    payload = {
+        "grant_type": "authorization_code",
+        "code": str(auth_token),
+        "redirect_uri": 'https://studiojet-samueldomain-5000.codio.io/spotify_callback/',
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+    }
+
+    post = requests.post(TOKEN_URL, data=payload)
+    response_data = json.loads(post.text)
+
+    access_token = response_data["access_token"]
+    refresh_token = response_data["refresh_token"]
+    token_type = response_data["token_type"]
+    expires_in = response_data["expires_in"] #TODO: convert to now + time, change expires_in to expires_by for auth checking later
+    now = datetime.now()
+    will_expire = now + timedelta(seconds=expires_in)
+
+    current_user=User.query.filter_by(username=session['username'], email=session['email']).first()
+
+    if current_user:
+        secrets = Token(user_id=current_user.id, access_token=access_token, refresh_token=refresh_token, token_type=token_type, expires_in=will_expire)
+        db.session.add(secrets)
+        db.session.commit()
+        return redirect(url_for('terminal'))
+    else:
+        return render_template("error.html")
+
+@app.route("/spotify_auth")
+@login_required
+def spotify():
+    current_user=User.query.filter_by(username=session['username'], email=session['email']).first()
+
+    if current_user:
+        tokens = current_user.tokens
+        if len(tokens) != 0:
+            Token.query.filter_by(user_id=current_user.id).delete()
+            db.session.commit()
+
+    auth_code = {
+        'client_id':CLIENT_ID,
+        'response_type':'code',
+        'redirect_uri':'https://studiojet-samueldomain-5000.codio.io/spotify_callback/', #Change if codebox name changes or once we have it hosted on heroku
+        'scope':'playlist-modify-private playlist-read-private',
+    }
+
+    url_args = "&".join(["{}={}".format(key, quote(val)) for key, val in auth_code.items()])
+    auth_url = "{}/?{}".format(AUTH_URL, url_args)
+    return redirect(auth_url)
+
+
 @app.route("/terminal", methods=['GET','POST','PUT'])
 @login_required
 def terminal():
-    user = User.query.filter_by(username=session['username']).first()
+    user = User.query.filter_by(username=session['username'], email=session['email']).first()
     form=TerminalForm()
     
     if form.validate_on_submit() and user:
         status = {'response':form.text.data, 'user':user}
-        response = handle_response(status)
-        
+        response = handle_basic_response(status)
+
         if response == "logout":
             return redirect(url_for('logout'))
  
@@ -146,10 +221,31 @@ def terminal():
             new_command = Command(command_text=form.text.data, user_id=user.id)
             db.session.add(new_command)
             db.session.commit()
+
+            if form.text.data == 'spotify login':
+                return redirect(url_for('spotify'))
+            elif form.text.data[0:7] == "spotify":
+                if len(list(user.tokens)) == 0:
+                    print("requesting another token?")
+                    resp = Prev_Response(response_text="Must have auth token first, let's authenticate!", user_id=user.id)
+                    db.session.add(resp)
+                    db.commit()
+                    return redirect(url_for("spotify"))
+                elif len(list(user.tokens)) == 1:
+                    token = list(user.tokens)[0]
+                    now = datetime.now()
+                    will_expire = now + timedelta(minutes=5)
+                    if token.expires_in < will_expire:
+                        print("requesting another token")
+                        resp = Prev_Response(response_text="Token will soon be out of order, will re-fetch code", user_id=user.id)
+                        db.session.add(resp)
+                        db.commit()
+                        return redirect(url_for("spotify"))
+                response = spotify_handler(user, form.text.data[7:])
+
             resp = Prev_Response(response_text=response, user_id=user.id)
             db.session.add(resp)
             db.session.commit()
-           
             
         form.text.data=""
         commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
@@ -162,7 +258,7 @@ def terminal():
 
     return render_template("terminal.html", form=form, response="")
 
-def handle_response(info):
+def handle_basic_response(info):
     data = info['response']
     response = ""
     if data[0:3] == "cd ":
@@ -186,6 +282,49 @@ def handle_response(info):
     elif data == "help":
         response = gen_help_string()
     return response
+
+def merge_playlists(user, playlist1, playlist2):
+    authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
+
+    return "merged"
+
+def list_playlists(user, num_playlists):
+    try:
+        num = 20
+        if num_playlists != "":
+            num = int(num_playlists)
+        authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
+        endpoint = f"{BASE_URL}me/playlists?limit={num}"
+        playlists = requests.get(endpoint, headers=authorization_header).json()
+        playlists = playlists['items']
+
+        to_return = ""
+        for playlist in playlists:
+            to_return += f"{playlist['name']}\n"
+        
+        return to_return
+    except ValueError:
+        return "Invalid parameters. Please enter 'spotify playlists <num_playlists>"
+        
+    
+
+def spotify_handler(user, data):
+    tokens = list(user.tokens)
+    token = tokens[0]
+    data = data.strip()
+    resp = token.expires_in
+
+    if data[0:6] == "merge ":
+        data = data[6:].split(" ")
+        if len(data) == 2:
+            resp = merge_playlists(user, data[0], data[1])
+        else:
+            resp="invalid num of playlists: please enter 2"
+    elif data[0:9] == "playlists":
+        resp = list_playlists(user, data[9:].strip())
+    else:
+        resp="invalid entry"
+    return resp
 
 def clear(user):
     Prev_Response.query.filter_by(user_id=user.id).delete()
@@ -289,6 +428,8 @@ def ls(content, user):
 @login_required
 def logout():
     user = session["username"]
+    # full_user = User.query.filter_by(username=session['username'], email=session['email']).first().tokens.delete()
+    # db.session.commit()
     session.clear()
     return redirect(url_for("home"))
 
