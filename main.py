@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 import requests
 import base64
 import json
+import bleach
+import math
 from urllib.parse import quote
 
 CLIENT_ID = os.environ.get('CLIENT_ID')
@@ -35,36 +37,9 @@ class User(db.Model):
     username = db.Column(db.String(255), unique=True, nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
-    folders = db.relationship("Folder", backref="user", lazy=True)  # folders in user directory
-    files = db.relationship("File", backref="user", lazy=True)  # all files the user has, will remove sometime
     commands = db.relationship("Command", backref="user", lazy=True)
     responses = db.relationship("Prev_Response", backref="user", lazy=True)
     tokens = db.relationship("Token", backref="user", lazy=True)
-
-class Folder(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), unique=True, nullable=False)
-    files = db.relationship("File", backref="folder", lazy=True)
-    root = db.Column(db.Boolean, nullable=False)  # True if it is the root directory (once we figure out the parent/child rel)
-    current = db.Column(db.Boolean, nullable=False)  # True if the user is currently in this directory
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
-        nullable=False)  # links it back to user
-    
-    parent_id = db.Column(db.Integer, db.ForeignKey('folder.id'))
-
-    children = db.relationship('Folder',
-        backref=db.backref('parent', remote_side='Folder.id'))
-
-
-class File(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    file_name = db.Column(db.String(255), unique=True, nullable=False)
-    file_content = db.Column(db.Text())
-    folder_id = db.Column(db.String(255), db.ForeignKey('folder.id'),
-        nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'),
-        nullable=False)
-    created = db.Column(db.DateTime())
 
 class Command(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -90,18 +65,40 @@ class Token(db.Model):
 def login_required(func):
     @functools.wraps(func)
     def secure_function(*args, **kwargs):
-        if "username" not in session:
+        if "username" not in session or "email" not in session:
             return redirect(url_for("login", next=request.url))
+        else:
+            user = User.query.filter_by(username=session['username'], email=session['email']).first()
+            if not user:
+                return redirect(url_for("login", next=request.url))
         return func(*args, **kwargs)
     return secure_function
 
 def is_logged_in(func):
     @functools.wraps(func)
     def secure_other(*args, **kwargs):
-        if "username" in session:
-            return redirect(url_for("terminal"))
+        if "username" in session and "email" in session:
+            user = User.query.filter_by(username=session['username'], email=session['email']).first()
+            if user:
+                return redirect(url_for("terminal"))
         return func(*args, **kwargs)
     return secure_other
+
+#ASSUMES YOU ARE LOGGED IN SO THAT MUST BE A REQUIREMENT AS WELL
+def spotify_login_required(func):
+    @functools.wraps(func)
+    def secure_spotify(*args, **kwargs):
+        user = User.query.filter_by(username=session['username'], email=session['email']).first()
+        if len(list(user.tokens)) == 0:
+            return redirect(url_for("spotify"))
+        elif len(list(user.tokens)) == 1:
+            token = list(user.tokens)[0]
+            now = datetime.now()
+            will_expire = now + timedelta(minutes=5)
+            if token.expires_in < will_expire:
+                return redirect(url_for("spotify"))
+        return func(*args, **kwargs)
+    return secure_spotify
 
 @app.route("/")
 @app.route("/home")
@@ -135,9 +132,7 @@ def register():
             user = User(username=form.username.data, email=form.email.data, password=form.password.data)
             db.session.add(user)
             db.session.commit()
-            home = Folder(root=True, current=True, name="~", user_id=user.id)
-            db.session.add(home)
-            db.session.commit()
+            
             return redirect(url_for("login"))
         else:
             if existing_users_with_email and existing_users_with_username:
@@ -170,7 +165,7 @@ def spotify_2():
     expires_in = response_data["expires_in"] #TODO: convert to now + time, change expires_in to expires_by for auth checking later
     now = datetime.now()
     will_expire = now + timedelta(seconds=expires_in)
-
+    
     current_user=User.query.filter_by(username=session['username'], email=session['email']).first()
 
     if current_user:
@@ -185,7 +180,6 @@ def spotify_2():
 @login_required
 def spotify():
     current_user=User.query.filter_by(username=session['username'], email=session['email']).first()
-
     if current_user:
         tokens = current_user.tokens
         if len(tokens) != 0:
@@ -196,7 +190,7 @@ def spotify():
         'client_id':CLIENT_ID,
         'response_type':'code',
         'redirect_uri':'https://studiojet-samueldomain-5000.codio.io/spotify_callback/', #Change if codebox name changes or once we have it hosted on heroku
-        'scope':'playlist-modify-private playlist-read-private',
+        'scope':'playlist-modify-private playlist-read-private playlist-read-collaborative playlist-modify-public ugc-image-upload',
     }
 
     url_args = "&".join(["{}={}".format(key, quote(val)) for key, val in auth_code.items()])
@@ -206,11 +200,12 @@ def spotify():
 
 @app.route("/terminal", methods=['GET','POST','PUT'])
 @login_required
+@spotify_login_required
 def terminal():
     user = User.query.filter_by(username=session['username'], email=session['email']).first()
     form=TerminalForm()
     
-    if form.validate_on_submit() and user:
+    if form.validate_on_submit():
         status = {'response':form.text.data, 'user':user}
         response = handle_basic_response(status)
 
@@ -218,31 +213,17 @@ def terminal():
             return redirect(url_for('logout'))
  
         if response != "cleared":
-            new_command = Command(command_text=form.text.data, user_id=user.id)
+            new_command = Command(command_text=tag(user)+form.text.data, user_id=user.id)
             db.session.add(new_command)
             db.session.commit()
 
             if form.text.data == 'spotify login':
                 return redirect(url_for('spotify'))
             elif form.text.data[0:7] == "spotify":
-                if len(list(user.tokens)) == 0:
-                    print("requesting another token?")
-                    resp = Prev_Response(response_text="Must have auth token first, let's authenticate!", user_id=user.id)
-                    db.session.add(resp)
-                    db.commit()
-                    return redirect(url_for("spotify"))
-                elif len(list(user.tokens)) == 1:
-                    token = list(user.tokens)[0]
-                    now = datetime.now()
-                    will_expire = now + timedelta(minutes=5)
-                    if token.expires_in < will_expire:
-                        print("requesting another token")
-                        resp = Prev_Response(response_text="Token will soon be out of order, will re-fetch code", user_id=user.id)
-                        db.session.add(resp)
-                        db.commit()
-                        return redirect(url_for("spotify"))
+                ################################# HERE
                 response = spotify_handler(user, form.text.data[7:])
 
+            response = bleach.clean(response, tags=['a','b'])
             resp = Prev_Response(response_text=response, user_id=user.id)
             db.session.add(resp)
             db.session.commit()
@@ -250,188 +231,180 @@ def terminal():
         form.text.data=""
         commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
         responses = Prev_Response.query.order_by(Prev_Response.id.desc()).filter_by(user_id=user.id)
-        return render_template("terminal.html", form=form, responses=responses, commands=commands)
-    if user:
-        commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
-        responses = Prev_Response.query.order_by(Prev_Response.id.desc()).filter_by(user_id=user.id)
-        return render_template("terminal.html", form=form, responses=responses, commands=commands)
+        return render_template("terminal.html", tag=tag(user), form=form, responses=list(responses), commands=list(commands))
+    
+    commands = Command.query.order_by(Command.id.desc()).filter_by(user_id=user.id)
+    responses = Prev_Response.query.order_by(Prev_Response.id.desc()).filter_by(user_id=user.id)
+    return render_template("terminal.html", tag=tag(user), form=form, responses=list(responses), commands=list(commands))
 
-    return render_template("terminal.html", form=form, response="")
+@app.route("/terminal/playlists", methods=['GET','POST','PUT'])
+@login_required
+@spotify_login_required
+def playlist_gui():
+    user = User.query.filter_by(username=session['username'], email=session['email']).first()
+    playlists = list_playlists(user)
+    return render_template("playlists.html", playlists=playlists)
+
+@app.route("/terminal/playlist/<playlist_name>", methods=['GET','POST','PUT'])
+@login_required
+@spotify_login_required
+def spec_playlist(playlist_name):
+    return render_template("playlist.html", playlist=playlist_name)
+
+"""
+TODO: clear tokens on logout
+TODO: clear all PrevResponses on logout
+"""
+@app.route("/logout")
+@login_required
+def logout():
+    user = session["username"]
+    session.clear()
+    return redirect(url_for("home"))
 
 def handle_basic_response(info):
     data = info['response']
     response = ""
-    if data[0:3] == "cd ":
-        response = change_directory(data[3:], info['user'])
-    elif data[0:5] == "echo ":
-        response = echo(data[5:], info['user'])
-    elif data[0:6] == "touch ":
-        response = touch(data[6:], info['user'])
-    elif data[0:6] == "mkdir ":
-        response = mkdir(data[6:], info['user'])
-    elif data[0:2] == "ls":
-        response = ls(data[2:], info['user'])
-    elif data[0:3] == "pwd":
-        response = pwd(info['user'])
-    elif data[0:6] == "logout":
+    if data[0:6] == "logout":
         response = "logout"
-    elif data == "path":
-        response = path(info['user'])
     elif data == "clear":
         response = clear(info['user'])
     elif data == "help":
         response = gen_help_string()
     return response
 
-def merge_playlists(user, playlist1, playlist2):
+"""
+TODO: MUST DEAL WITH DUPLICATE PLAYLIST NAMES (MAKE SOME SORT OF DECISION THERE)
+TODO: MUST EXPAND TO DEAL WITH ANY NUMBER OF PLAYLISTS
+"""
+def merge_playlists(user, playlist1, playlist2, playlist3):
     authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
+    playlists = list_playlists(user)
+    first = ""
+    second = ""
+    found1 = False
+    found2 = False
+    playlist1_alt = playlist1.replace("'", "’") #control for weird apostrophe differences
+    playlist2_alt = playlist2.replace("'", "’") #control for weird apostrophe differences
 
-    return "merged"
+    for playlist in playlists:
+        if playlist['name'].strip() == playlist1.strip() or playlist['name'].strip() == playlist1_alt.strip():
+            first = playlist
+            found1 = True
+        if playlist['name'].strip() == playlist2.strip() or playlist['name'].strip() == playlist2_alt.strip():
+            second = playlist
+            found2 = True
 
-def list_playlists(user, num_playlists):
-    try:
-        num = 20
-        if num_playlists != "":
-            num = int(num_playlists)
-        authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
-        endpoint = f"{BASE_URL}me/playlists?limit={num}"
-        playlists = requests.get(endpoint, headers=authorization_header).json()
-        playlists = playlists['items']
-
-        to_return = ""
-        for playlist in playlists:
-            to_return += f"{playlist['name']}\n"
-        
-        return to_return
-    except ValueError:
-        return "Invalid parameters. Please enter 'spotify playlists <num_playlists>"
-        
+        if found1 and found2:
+            break
     
+    if found1 and found2:
+        # create a new playlist with name playlist1 and playlist2 merge
+        me = requests.get(BASE_URL+"me", headers=authorization_header).json()['id']
+        data = {"name": playlist3,
+                "public": False,
+                "description": f"A merged playlist based on {playlist1} and {playlist2}"}
 
+        created = requests.post(f"{BASE_URL}users/{me}/playlists", headers=authorization_header, data=json.dumps(data)).json()
+        uris = []
+
+        
+        tracks_first_url = first['tracks']['href']
+        tracks_first = requests.get(tracks_first_url, headers=authorization_header).json()
+        tracks_second_url = second['tracks']['href']
+        tracks_second = requests.get(tracks_second_url, headers=authorization_header).json()
+
+        while tracks_first['next'] != None:
+            for item in tracks_first['items']:
+                uris.append(item['track']['uri'])
+            tracks_first = requests.get(tracks_first['next'], headers=authorization_header).json()
+
+        while tracks_second['next'] != None:
+            for item in tracks_second['items']:
+                uris.append(item['track']['uri'])
+            tracks_second = requests.get(tracks_second['next'], headers=authorization_header).json()
+
+        for item in tracks_first['items']:
+            uris.append(item['track']['uri'])
+        
+        for item in tracks_second['items']:
+            uris.append(item['track']['uri'])
+
+        iterations = math.ceil(float(len(uris))/100)
+
+        for i in range(iterations):
+            if len(uris) > 100:
+                data = {
+                    "uris":uris[:100],
+                }
+                uris = uris[100:]
+                adding = requests.post(created['tracks']['href'], headers=authorization_header, data=json.dumps(data)).json()
+            else:
+                data = {
+                    "uris":uris,
+                }
+                adding = requests.post(created['tracks']['href'], headers=authorization_header, data=json.dumps(data)).json()
+            
+        return f"<a href='{created['external_urls']['spotify']}'>Link to Spotify</a>"
+    else:
+        return "Unable to find both playlist- please make sure you are entering them in correctly (they are case sensitive). If this is an error on my end, don't be afraid to reach out."
+    return "weird issue? you're missing error handling somewhere"
+
+def list_playlists(user):
+    authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
+    to_return = list("")
+
+    endpoint = f"{BASE_URL}me/playlists?limit={50}"
+    playlists = requests.get(endpoint, headers=authorization_header).json()
+    to_return += playlists['items']
+    endpoint = playlists['next']
+
+    while endpoint != None:
+        playlists = requests.get(endpoint, headers=authorization_header).json()
+        to_return += playlists['items']
+        endpoint = playlists['next']
+    
+    return to_return
+    
 def spotify_handler(user, data):
     tokens = list(user.tokens)
     token = tokens[0]
     data = data.strip()
-    resp = token.expires_in
+    resp = str(token.expires_in)
 
     if data[0:6] == "merge ":
-        data = data[6:].split(" ")
-        if len(data) == 2:
-            resp = merge_playlists(user, data[0], data[1])
+        data = data[6:].strip().split("\"")
+        correct_formatting= (data[0].strip() == "first=") and (data[2].strip() == "second=") and (data[4].strip() == "new=")
+        if len(data) == 7 and correct_formatting:
+            resp = merge_playlists(user, data[1], data[3], data[5])
         else:
             resp="invalid num of playlists: please enter 2"
-    elif data[0:9] == "playlists":
-        resp = list_playlists(user, data[9:].strip())
+    elif data == "playlists":
+        resp = list_playlists(user)
+        # resp is a list
+        if type(resp) is list:
+            returnable = "Each playlist below is linked (click on the title to go to the playlist\n\n"
+            for i in range(len(resp)):
+                returnable += f"{i + 1}: <a href='{resp[i]['external_urls']['spotify']}'>{resp[i]['name']}</a>   "
+                if (i + 1) % 5 == 0 and i >= 4:
+                    returnable += "\n\n"
+            resp = returnable
     else:
-        resp="invalid entry"
+        return "invalid entry"
     return resp
 
 def clear(user):
     Prev_Response.query.filter_by(user_id=user.id).delete()
+    Command.query.filter_by(user_id=user.id).delete()
     db.session.commit()
     return "cleared"
 
-def path(user):
-    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    back = current_folder
-    path = ""
-    current_name = current_folder.name
-
-    while current_name != "~":
-        temp_path = path
-        path = "/" + back.name + temp_path
-        back = Folder.query.filter_by(user_id=user.id, id=back.parent_id).first()  # gets parent of current folder
-        current_name = back.name
-
-    return "~" + path + "/"
+def tag(user):
+    return f"{user.username}  >"
 
 
-def change_directory(content, user):
-    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    new_folder = None
-
-    if content.strip() != "..":
-        new_folder = Folder.query.filter_by(user_id=user.id, name=content.strip(), parent_id=current_folder.id).first()
-    else:
-        parent_of_current = Folder.query.filter_by(user_id=user.id, id=current_folder.parent_id).first()  # gets parent of current for later
-
-        if parent_of_current:
-            new_folder = parent_of_current
-    
-    if current_folder and new_folder != None:
-        current_folder.current = False
-        new_folder.current = True
-        db.session.commit()
-        return ""
-
-    return "Could not change directory because there is no current directory"
-
-def echo(content, user):
-    return content
-
-def touch(content, user):
-    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    if current_folder:
-        is_existing = File.query.filter_by(user_id=user.id, folder_id=current_folder.id, file_name=content.strip()).first()
-        if not is_existing:
-            new_file = File(user_id=user.id, file_name=content.strip(), created=datetime.now(), folder_id=current_folder.id)
-            db.session.add(new_file)
-            db.session.commit()
-            return new_file.file_name
-
-        return f'Error: file already exists in this directory with the name {content.strip()}'
-
-    return f'Error: no current working directory'
-
-def pwd(user):
-    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    if current_folder:
-        print(current_folder.name)
-        return current_folder.name
-
-    return f'Error: no current working directory'
-
-def mkdir(content, user):
-    current_directory = Folder.query.filter_by(user_id=user.id, current=True).first()
-
-    content = content.strip()
-    is_existing = Folder.query.filter_by(parent_id=current_directory.id, user_id=user.id, name=content).first()
-
-    if not is_existing:
-        new_folder = Folder(parent_id=current_directory.id, name=content, current=False, user_id=user.id, root=False)
-        db.session.add(new_folder)
-        db.session.commit()
-        return ""
-    
-    return f'Could not create {content} folder because {content} already exists'
 
 
-def ls(content, user):
-    # will need to keep track of current directory for this
-    current_folder = Folder.query.filter_by(user_id=user.id, current=True).first()
-    # home = Folder(root=True, current=True, name="~", user_id=user.id)
-    if current_folder:
-        files = current_folder.files
-        directories = current_folder.children
-
-        list_files = ""
-        for fil in files:
-            list_files += fil.file_name +" "
-        for dire in directories:
-            list_files += f'<b>{dire.name}</b>' + " "
-        return list_files
-
-    return f'Could not list files in current directory because there is no current directory'
-
-
-@app.route("/logout")
-@login_required
-def logout():
-    user = session["username"]
-    # full_user = User.query.filter_by(username=session['username'], email=session['email']).first().tokens.delete()
-    # db.session.commit()
-    session.clear()
-    return redirect(url_for("home"))
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0")

@@ -1,30 +1,20 @@
 def gen_help_string():
-    help_string = """HELP
-Here are a list of commands and their function:
+    help_string = """Here are a list of commands and their functions:
 
 C:
-cd <new_dir>: changes current directory to new directory
-clear: clears all previous commands from the terminal
-
-E:
-echo <text>: prints out what you type, and eventually will be able to send it to a file
+<b>clear</b>: clears all previous commands from the terminal
 
 H:
-help: brings up this general help menu
+<b>help</b>: brings up this help menu
 
 L:
-logout: allows user to logout from terminal
-ls: prints out what files/folders are in the current directory
+<b>logout</b>: allows user to logout from terminal
 
-M:
-mkdir <dir_name>: makes a new directory in the current directory with that filename
+S:
+<b>spotify login</b>: logs you in through spotify
+<b>spotify merge first="<first_playlist_name>" second="<second_playlist_name>" new="<new_playlist_name>"</b>: merges the first and second playlist tracks into a new playlist named new_playlist_name
+<b>spotify playlists</b>: lists all playlists of the current user, along with links
 
-P:
-pwd: prints out the directory you are currently in (just the name of the current directory)
-path:prints the path to the current directory. In the future it may also take an argument to print path to that file
-
-T:
-touch <filename>: creates a new file in the current directory with the given filename
 """
     #split_string = help_string.split("\n")
     return help_string

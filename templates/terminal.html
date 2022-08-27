@@ -15,9 +15,11 @@
 </div>
 <div class="terminal">
     <div>
-        {% for response in responses|reverse %}
-            <div style="padding-left:11vh;"> {{ commands[loop.revindex0].command_text }}</div>
-            <div style="padding-left:11vh;"><pre>{{ response.response_text }}</pre></div>
+        {% for command in commands|reverse %}
+            <div style="padding-left:11vh;"><b>{{ command.command_text }}</b></div>
+            {% if responses|length > loop.revindex0 %}
+                <div style="padding-left:16vh;"><pre>{{ responses[loop.revindex0].response_text|safe }}</pre></div>
+            {% endif %}
         {% endfor %}
     </div>
 </div>
@@ -27,10 +29,11 @@
         {{ form.hidden_tag() }}
         <input autocomplete="false" name="hidden" type="text" style="display:none;">
         <div class="form-group">
-            {{ form.submit(style="visibility:hidden") }}
+            {{ form.submit(style="visibility:hidden; padding:0px;margin:0px;border:0px;width:0px;height:0px;") }}
         </div>
         <div class="form-group">
-            {{ form.text(style="width:87vw;", autofocus=on) }}
+            {{ tag }}
+            {{ form.text(style="width:83vw;", autofocus=on) }}
         </div>
         
     </form>
@@ -40,19 +43,5 @@
         window.scrollTo(0, document.body.scrollHeight);
     }
     window.onload=toBottom;
-
-    document.onkeydown = waitKey;
-
-function waitKey(e) {
-    e = e || window.event;
-
-    if (e.keyCode == '38') {
-        // up arrow
-    }
-    else if (e.keyCode == '40') {
-        // down arrow
-    }
-
-}
 </script>
 {% endblock %}
