@@ -11,11 +11,12 @@
     <div class="terminal-navbar" style="justify-content:right;">
         <a href="/"><h1 style="padding-right:5vh; padding-top:2vh; ">Playlists</h1></a>
     </div>
-    <div class="playlists-wrapper">
+
+    <div class="grid-wrapper">
         {% for playlist in playlists %}
-            <div class="playlist" style="background-image:url({{ playlist['images'][0]['url'] }}); background-size:contain; background-repeat:no-repeat; background-position:center; min-height:18vh">
+            <div class="grid-box" style="background-image:url({{ playlist['images'][0]['url'] }}); background-size:contain; background-repeat:no-repeat; background-position:center; min-height:18vh">
                 <div class="filter">
-                    <a href="/terminal/playlist/{{ playlist['name']}}"><div class="text-overlay">{{ playlist['name']}}</a></div>
+                    <a href="/terminal/playlists?playlist={{ playlist['id']}}"><div class="text-overlay">{{ playlist['name']}}</div></a>
                 </div>
             </div>
         {% endfor %}

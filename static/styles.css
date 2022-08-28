@@ -36,13 +36,6 @@ p, div, input {
     background: linear-gradient(180deg, rgba(10,9,27,1) 0%, rgba(9,9,121,1) 100%);
 }
 
-.playlist-wrapper {
-    width:100%;
-    height:100%;
-    min-height:100vh;
-    border: 2px solid green;
-}
-
 .filter {
     width: 100%;
     height:100%;
@@ -56,6 +49,7 @@ p, div, input {
     margin-right: 1vh;
     margin-left: 1vh;
     text-align:center;
+    
 }
 
 .filter:hover {
@@ -67,37 +61,37 @@ p, div, input {
     justify-content:center;
 }
 
-.playlists-wrapper {
+.grid-wrapper {
     width:90%;
     min-height:80vh;
+    height:100%;
     padding:0vh 10vh 0vh 10vh;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    grid-gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(auto, 30vh));
+    gap: 5vh;
 }
 
-.grid > .playlist {
+.grid > .grid-box {
   background: black;
   padding: 1rem;
   display: grid;
 }
 
-.grid > .playlist::before,
-.grid > .playlist > img {
+.grid > .grid-box::before,
+.grid > .grid-box > img {
   content: "";
   padding-bottom: 100%;
   display: block;
   grid-area: 1 / 1 / 2 / 2;
 }
 
-.grid > .playlist > img {
+.grid > .grid-box > img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.playlist {
-    margin: 1vw;
+.grid-box {
     display:flex;
     align-items: center;
     justify-content:center;

@@ -1,19 +1,48 @@
 {% extends 'post_login.html' %}
 {% block title %}
-<title>Your Playlists</title>
-<link href="../static/styles.css" rel="stylesheet">
+<title> {{ name }} </title>
+<link href="../../static/styles.css" rel="stylesheet" type="text/css"> <!-- WILL NEED TO CHANGE IF YOU CHANGE THE ROUTES -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
 {% endblock %}
 {% block content %}
 <div class="content">
-    <div class="terminal-navbar" style="justify-content:right;">
-        <a href="/"><h1 style="padding-right:5vh; padding-top:2vh; ">Playlists</h1></a>
-    </div>
-    <div class="playlists-wrapper">
-        
+    <form method="POST" action={{ url_for('form_processing')}}>
+        <select name="playlist">
+            {% for playlist in all %}
+                <option value= {{ playlist['id']}}>{{ playlist['name'] }}</option>
+            {% endfor %}
+        </select>
+        <input type="hidden" name="current_ids" value={{ current_ids }}></input>
+        <input type="submit">
+    </form>
+    <div class="grid-wrapper" style="width:90%; justify-content:center;">
+        {% for playlist in playlists %}
+        <div class="grid-box" style="max-width:50vw; align-items:flex-start; padding-bottom:20vh;">
+            <div class="grid-wrapper" style="gap:1vh;">
+                <div class="grid-box" style="align-items:start; background:transparent; max-width:100%; margin-bottom:0px;">
+                    <a href={{ playlist['external_urls']['spotify'] }}><h1 style="padding-left:0vh; margin-left:0vh; max-width:100%; text-align:center;">{{ playlist['name'] }}</h1></a>
+                </div>
+                <div class="grid-box" style="text-align:center; align-items:flex-start; background:transparent; max-width:100%; min-width:90%; margin-top:0px; margin-bottom:0px;">
+                    Description: {{ playlist['description']}}
+                </div>
+                {% for track in playlist['tracks']['items'] %}
+                    <div class="grid-box" style="background-image:url({{ track['track']['album']['images'][1]['url'] }}); background-size:contain; background-repeat:no-repeat; background-position:center; max-height:20vh; min-height:18vh; ">
+                        <a href={{ track['track']['external_urls']['spotify'] }} style="width:100%; height:100%">
+                        <div class="filter">
+                            <div class="text-overlay"><div style="cursor:pointer;"> {{ track['track']['name'] }}</div></div>
+                        </div>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
     </div>
     <div class="spacer"></div>
 </div>
+<script>
+
+</script>
 {% endblock %}

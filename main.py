@@ -219,8 +219,9 @@ def terminal():
 
             if form.text.data == 'spotify login':
                 return redirect(url_for('spotify'))
+            elif form.text.data == 'spotify playlists':
+                return redirect(url_for('playlist_gui'))
             elif form.text.data[0:7] == "spotify":
-                ################################# HERE
                 response = spotify_handler(user, form.text.data[7:])
 
             response = bleach.clean(response, tags=['a','b'])
@@ -242,14 +243,39 @@ def terminal():
 @spotify_login_required
 def playlist_gui():
     user = User.query.filter_by(username=session['username'], email=session['email']).first()
-    playlists = list_playlists(user)
-    return render_template("playlists.html", playlists=playlists)
+    all_playlists = list_playlists(user)
 
-@app.route("/terminal/playlist/<playlist_name>", methods=['GET','POST','PUT'])
+    if len(request.args.getlist("playlist")) == 0:
+        return render_template("playlists.html", playlists=all_playlists)
+    else:
+        authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
+        list_params = request.args.getlist("playlist")
+        playlists = []
+        ids = ""
+        name = "Playlist comparison: "
+        for playlist_id in list_params:
+            endpoint = f"{BASE_URL}playlists/{playlist_id}"
+            playlist = requests.get(endpoint, headers=authorization_header).json()
+            playlists.append(playlist)
+            name += playlist['name'] + ", "
+            ids += playlist['id'] + ","
+        name = name[:-2]
+        return render_template("playlist.html", name=name, playlists=playlists, all=all_playlists, current_ids=ids)
+
+@app.route("/terminal/playlists/add_playlist", methods=['GET','POST'])
 @login_required
 @spotify_login_required
-def spec_playlist(playlist_name):
-    return render_template("playlist.html", playlist=playlist_name)
+def form_processing():
+    new_id = request.form['playlist']
+    current_ids = request.form['current_ids'].split(",")
+    current_ids = [value for value in current_ids if value != "" and value != " "]
+    current_ids.append(new_id)
+    
+    new_url = url_for('playlist_gui')+"?"
+    for i in current_ids:
+        new_url+="playlist="+i+"&"
+    new_url = new_url[:-1]
+    return redirect(new_url)
 
 """
 TODO: clear tokens on logout
@@ -379,7 +405,7 @@ def spotify_handler(user, data):
             resp = merge_playlists(user, data[1], data[3], data[5])
         else:
             resp="invalid num of playlists: please enter 2"
-    elif data == "playlists":
+    elif data == "list playlists":
         resp = list_playlists(user)
         # resp is a list
         if type(resp) is list:
