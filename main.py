@@ -96,7 +96,7 @@ def spotify_login_required(func):
             now = datetime.now()
             will_expire = now + timedelta(minutes=5)
             if token.expires_in < will_expire:
-                return redirect(url_for("spotify"))
+                return redirect(url_for("spotify", next=request.url))
         return func(*args, **kwargs)
     return secure_spotify
 
@@ -277,15 +277,17 @@ def form_processing():
     new_url = new_url[:-1]
     return redirect(new_url)
 
-"""
-TODO: clear tokens on logout
-TODO: clear all PrevResponses on logout
-"""
 @app.route("/logout")
 @login_required
 def logout():
     user = session["username"]
     session.clear()
+    Prev_Response.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    Command.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    Token.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
     return redirect(url_for("home"))
 
 def handle_basic_response(info):
@@ -301,61 +303,52 @@ def handle_basic_response(info):
 
 """
 TODO: MUST DEAL WITH DUPLICATE PLAYLIST NAMES (MAKE SOME SORT OF DECISION THERE)
-TODO: MUST EXPAND TO DEAL WITH ANY NUMBER OF PLAYLISTS
 """
-def merge_playlists(user, playlist1, playlist2, playlist3):
+def merge_playlists(user, data):
     authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
     playlists = list_playlists(user)
-    first = ""
-    second = ""
-    found1 = False
-    found2 = False
-    playlist1_alt = playlist1.replace("'", "’") #control for weird apostrophe differences
-    playlist2_alt = playlist2.replace("'", "’") #control for weird apostrophe differences
+
+    targets = data[:-1]
+    num_targets = len(targets)
+    new_list = data[-1]
+    count_found = 0
+    mergeable = []
 
     for playlist in playlists:
-        if playlist['name'].strip() == playlist1.strip() or playlist['name'].strip() == playlist1_alt.strip():
-            first = playlist
-            found1 = True
-        if playlist['name'].strip() == playlist2.strip() or playlist['name'].strip() == playlist2_alt.strip():
-            second = playlist
-            found2 = True
-
-        if found1 and found2:
-            break
+        for target in targets:
+            target_alt = target.replace("'", "’")
+            if target.strip() == playlist['name'].strip() or target_alt.strip() == playlist['name'].strip():
+                count_found += 1
+                mergeable.append(playlist)
+                break
     
-    if found1 and found2:
+    if count_found >= num_targets:
         # create a new playlist with name playlist1 and playlist2 merge
         me = requests.get(BASE_URL+"me", headers=authorization_header).json()['id']
-        data = {"name": playlist3,
+        desc = f"A merged playlist based on "
+
+        for i in range(num_targets):
+            desc += targets[i]
+            if i < num_targets - 1:
+                desc += " and "
+
+        data = {"name": new_list,
                 "public": False,
-                "description": f"A merged playlist based on {playlist1} and {playlist2}"}
+                "description": desc}
 
         created = requests.post(f"{BASE_URL}users/{me}/playlists", headers=authorization_header, data=json.dumps(data)).json()
         uris = []
 
-        
-        tracks_first_url = first['tracks']['href']
-        tracks_first = requests.get(tracks_first_url, headers=authorization_header).json()
-        tracks_second_url = second['tracks']['href']
-        tracks_second = requests.get(tracks_second_url, headers=authorization_header).json()
-
-        while tracks_first['next'] != None:
-            for item in tracks_first['items']:
+        for playlist in mergeable:
+            url = playlist['tracks']['href']
+            resp = requests.get(url, headers=authorization_header).json()
+            while resp['next'] != None:
+                for item in resp['items']:
+                    uris.append(item['track']['uri'])
+                resp = requests.get(url, headers=authorization_header).json()
+            for item in resp['items']:
                 uris.append(item['track']['uri'])
-            tracks_first = requests.get(tracks_first['next'], headers=authorization_header).json()
-
-        while tracks_second['next'] != None:
-            for item in tracks_second['items']:
-                uris.append(item['track']['uri'])
-            tracks_second = requests.get(tracks_second['next'], headers=authorization_header).json()
-
-        for item in tracks_first['items']:
-            uris.append(item['track']['uri'])
         
-        for item in tracks_second['items']:
-            uris.append(item['track']['uri'])
-
         iterations = math.ceil(float(len(uris))/100)
 
         for i in range(iterations):
@@ -373,7 +366,7 @@ def merge_playlists(user, playlist1, playlist2, playlist3):
             
         return f"<a href='{created['external_urls']['spotify']}'>Link to Spotify</a>"
     else:
-        return "Unable to find both playlist- please make sure you are entering them in correctly (they are case sensitive). If this is an error on my end, don't be afraid to reach out."
+        return "Unable to find playlists (they are case sensitive). If this is an error on my end, don't be afraid to reach out."
     return "weird issue? you're missing error handling somewhere"
 
 def list_playlists(user):
@@ -398,13 +391,10 @@ def spotify_handler(user, data):
     data = data.strip()
     resp = str(token.expires_in)
 
-    if data[0:6] == "merge ":
-        data = data[6:].strip().split("\"")
-        correct_formatting= (data[0].strip() == "first=") and (data[2].strip() == "second=") and (data[4].strip() == "new=")
-        if len(data) == 7 and correct_formatting:
-            resp = merge_playlists(user, data[1], data[3], data[5])
-        else:
-            resp="invalid num of playlists: please enter 2"
+    if data[0:6] == "merge ": 
+        data = data[7:-1].strip().split("\" \"")
+        resp = merge_playlists(user, data)
+        
     elif data == "list playlists":
         resp = list_playlists(user)
         # resp is a list

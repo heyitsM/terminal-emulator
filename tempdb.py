@@ -12,7 +12,7 @@ L:
 
 S:
 <b>spotify login</b>: logs you in through spotify
-<b>spotify merge first="<first_playlist_name>" second="<second_playlist_name>" new="<new_playlist_name>"</b>: merges the first and second playlist tracks into a new playlist named new_playlist_name
+<b>spotify merge "<first_playlist_name>" "<second_playlist_name>" ... "<new_playlist_name>"</b>: merges the first n - 1 playlists and creates a new one with name new_playlist_name
 <b>spotify playlists</b>: lists all playlists of the current user, along with links
 
 """

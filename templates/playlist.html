@@ -19,16 +19,16 @@
     </form>
     <div class="grid-wrapper" style="width:90%; justify-content:center;">
         {% for playlist in playlists %}
-        <div class="grid-box" style="max-width:50vw; align-items:flex-start; padding-bottom:20vh;">
-            <div class="grid-wrapper" style="gap:1vh;">
-                <div class="grid-box" style="align-items:start; background:transparent; max-width:100%; margin-bottom:0px;">
+        <div class="grid-box" style="max-width:50vw; align-items:stretch; padding-bottom:20vh;">
+            <div class="grid-wrapper" style="gap:1vh; padding:0vh; margin:0vh;">
+                <div class="grid-box" style="align-items:start; background:transparent; max-width:100%; margin-bottom:0px; max-height:12vh; margin-top:2vh; margin-bottom:2vh;">
                     <a href={{ playlist['external_urls']['spotify'] }}><h1 style="padding-left:0vh; margin-left:0vh; max-width:100%; text-align:center;">{{ playlist['name'] }}</h1></a>
                 </div>
-                <div class="grid-box" style="text-align:center; align-items:flex-start; background:transparent; max-width:100%; min-width:90%; margin-top:0px; margin-bottom:0px;">
+                <div class="grid-box" style="text-align:center; align-items:flex-start; background:transparent; max-width:100%; min-width:90%; margin-top:0px; margin-bottom:0px; max-height:12vh;">
                     Description: {{ playlist['description']}}
                 </div>
                 {% for track in playlist['tracks']['items'] %}
-                    <div class="grid-box" style="background-image:url({{ track['track']['album']['images'][1]['url'] }}); background-size:contain; background-repeat:no-repeat; background-position:center; max-height:20vh; min-height:18vh; ">
+                    <div class="grid-box" style="background-image:url({{ track['track']['album']['images'][1]['url'] }}); background-size:contain; background-position:center; background-repeat:round; min-height:8vh; margin:1vh;">
                         <a href={{ track['track']['external_urls']['spotify'] }} style="width:100%; height:100%">
                         <div class="filter">
                             <div class="text-overlay"><div style="cursor:pointer;"> {{ track['track']['name'] }}</div></div>
