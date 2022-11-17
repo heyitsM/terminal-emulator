@@ -16,6 +16,7 @@ import json
 import bleach
 import math
 from urllib.parse import quote
+import re
 
 CLIENT_ID = os.environ.get('CLIENT_ID')
 CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
@@ -168,23 +169,19 @@ def spotify_2():
     
     current_user=User.query.filter_by(username=session['username'], email=session['email']).first()
 
-    if current_user:
-        secrets = Token(user_id=current_user.id, access_token=access_token, refresh_token=refresh_token, token_type=token_type, expires_in=will_expire)
-        db.session.add(secrets)
-        db.session.commit()
-        return redirect(url_for('terminal'))
-    else:
-        return render_template("error.html")
+    secrets = Token(user_id=current_user.id, access_token=access_token, refresh_token=refresh_token, token_type=token_type, expires_in=will_expire)
+    db.session.add(secrets)
+    db.session.commit()
+    return redirect(url_for('terminal'))
 
 @app.route("/spotify_auth")
 @login_required
 def spotify():
     current_user=User.query.filter_by(username=session['username'], email=session['email']).first()
-    if current_user:
-        tokens = current_user.tokens
-        if len(tokens) != 0:
-            Token.query.filter_by(user_id=current_user.id).delete()
-            db.session.commit()
+    tokens = current_user.tokens
+    if len(tokens) != 0:
+        Token.query.filter_by(user_id=current_user.id).delete()
+        db.session.commit()
 
     auth_code = {
         'client_id':CLIENT_ID,
@@ -220,7 +217,8 @@ def terminal():
             if form.text.data == 'spotify login':
                 return redirect(url_for('spotify'))
             elif form.text.data == 'spotify playlists':
-                return redirect(url_for('playlist_gui'))
+                return redirect(url_for('terminal'))
+                # return redirect(url_for('playlist_gui'))
             elif form.text.data[0:7] == "spotify":
                 response = spotify_handler(user, form.text.data[7:])
 
@@ -242,6 +240,7 @@ def terminal():
 @login_required
 @spotify_login_required
 def playlist_gui():
+    return redirect(url_for("terminal"))
     user = User.query.filter_by(username=session['username'], email=session['email']).first()
     all_playlists = list_playlists(user)
 
@@ -281,6 +280,7 @@ def form_processing():
 @login_required
 def logout():
     user = session["username"]
+    user = User.query.filter_by(username=user).first()
     session.clear()
     Prev_Response.query.filter_by(user_id=user.id).delete()
     db.session.commit()
@@ -302,25 +302,36 @@ def handle_basic_response(info):
     return response
 
 """
-TODO: MUST DEAL WITH DUPLICATE PLAYLIST NAMES (MAKE SOME SORT OF DECISION THERE)
+Where the merges actually happen
 """
 def merge_playlists(user, data):
     authorization_header = {"Authorization": f"Bearer {user.tokens[0].access_token}"}
     playlists = list_playlists(user)
 
-    targets = data[:-1]
+    targets = list(data.keys())
+    targets.remove("new_name")
     num_targets = len(targets)
-    new_list = data[-1]
+    new_list = data["new_name"]
     count_found = 0
     mergeable = []
 
-    for playlist in playlists:
-        for target in targets:
+    for target in targets:
+        if type(data[target]) is list:
+            to_find = data[target]
+            options = []
             target_alt = target.replace("'", "’")
-            if target.strip() == playlist['name'].strip() or target_alt.strip() == playlist['name'].strip():
+            for playlist in playlists:
+                if target.strip() == playlist['name'].strip() or target_alt.strip() == playlist['name'].strip():
+                    options.append(playlist)
+            for i in to_find:
+                mergeable.append(options[i - 1])
                 count_found += 1
-                mergeable.append(playlist)
-                break
+        elif type(data[target]) is int:
+            for playlist in playlists:
+                if target.strip() == playlist['name'].strip() or target_alt.strip() == playlist['name'].strip():
+                    count_found += 1
+                    mergeable.append(playlist)
+                    break      
     
     if count_found >= num_targets:
         # create a new playlist with name playlist1 and playlist2 merge
@@ -384,7 +395,37 @@ def list_playlists(user):
         endpoint = playlists['next']
     
     return to_return
-    
+
+def list_relevant_playlists(user, data):
+    all_playlists = list_playlists(user)
+    relevant_playlists = []
+
+    for playlist in all_playlists:
+        if playlist['name'] == data or playlist['name'].strip() == data or playlist['name'].strip().lower() == data:
+            relevant_playlists.append(playlist)
+        else:
+            # BELOW is to compare to any substring, will want to include later when you add more flags
+
+            # Compares whole words in playlist name
+            comparator = playlist['name'].split(" ")
+            for to_comp in comparator:
+                if to_comp == data:
+                    relevant_playlists.append(playlist)
+                    break
+                    
+            """
+            #Will compare subwords, have to figure out how to utilize without getting repeats
+            try:
+                index = playlist['name'].strip().lower().index(data)
+                relevant_playlists.append(playlist)
+                print(playlist['name'])
+                
+            except ValueError:
+                print("not found")
+            """
+            
+    return relevant_playlists
+
 def spotify_handler(user, data):
     tokens = list(user.tokens)
     token = tokens[0]
@@ -392,22 +433,71 @@ def spotify_handler(user, data):
     resp = str(token.expires_in)
 
     if data[0:6] == "merge ": 
-        data = data[7:-1].strip().split("\" \"")
+        data = data[7:].strip().split("\"")
+        data = format_for_merge(data)
         resp = merge_playlists(user, data)
         
-    elif data == "list playlists":
-        resp = list_playlists(user)
-        # resp is a list
-        if type(resp) is list:
-            returnable = "Each playlist below is linked (click on the title to go to the playlist\n\n"
-            for i in range(len(resp)):
-                returnable += f"{i + 1}: <a href='{resp[i]['external_urls']['spotify']}'>{resp[i]['name']}</a>   "
-                if (i + 1) % 5 == 0 and i >= 4:
-                    returnable += "\n\n"
-            resp = returnable
+    elif data[0:14] == "list playlists":
+        if data[14:] == "":
+            resp = list_playlists(user)
+            # resp is a list
+            if type(resp) is list:
+                returnable = "Each playlist below is linked (click on the title to go to the playlist)\n\n"
+                for i in range(len(resp)):
+                    returnable += f"{i + 1}: <a href='{resp[i]['external_urls']['spotify']}'>{resp[i]['name']}</a>   "
+                    if (i + 1) % 5 == 0 and i >= 4:
+                        returnable += "\n\n"
+                resp = returnable
+        else:
+            resp = data[14:].strip()
+            try:
+                index = data.index(" -f ")
+                data = data[index + 3:].strip()
+                data = data.split("\"")
+                data = [i for i in data if i]
+                data = [i for i in data if i.strip() != ""]
+
+                returnable = "Each playlist below is linked (click on the title to go to the playlist)\n\n"
+
+                for item in data:
+                    one_resp = list_relevant_playlists(user, item.lower().strip())
+                    if type(one_resp) is list and len(one_resp) != 0:                        
+                        for i in range(len(one_resp)):
+                            returnable += f"{i + 1}: <a href='{one_resp[i]['external_urls']['spotify']}'>{one_resp[i]['name']}</a>   "
+                            if (i + 1) % 5 == 0 and i >= 4:
+                                returnable += "\n\n"
+                    else:
+                        returnable += f"\n\nFor term {item}, No relevant playlists found"
+                resp = returnable
+            except ValueError:
+                print("No -f found")
     else:
         return "invalid entry"
     return resp
+
+def format_for_merge(inp):
+    obj = {}
+
+    for i in range(0, len(inp), 2):
+        if inp[i + 1] == '' or inp[i + 1] == ' ':
+            if i == len(inp) - 2:
+                inp[i + 1] = 1
+                obj["new_name"] = inp[i]
+            else:
+                inp[i + 1] = 1
+                obj[inp[i]] = 1
+        else:
+            try:
+                inp[i + 1] = int(inp[i + 1].strip())
+                inp[i + 1] *= -1
+
+                if obj.get(inp[i]) == None:
+                    obj[inp[i].strip()] = [inp[i + 1]]
+                else:
+                    obj[inp[i]].append(inp[i + 1])
+            except ValueError:
+                print("Invalid Input Format")     
+    return obj
 
 def clear(user):
     Prev_Response.query.filter_by(user_id=user.id).delete()
